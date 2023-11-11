@@ -17,15 +17,14 @@
 
 package org.apache.kafka.image;
 
+import org.apache.kafka.image.node.ClusterImageNode;
+import org.apache.kafka.image.writer.ImageWriter;
+import org.apache.kafka.image.writer.ImageWriterOptions;
 import org.apache.kafka.metadata.BrokerRegistration;
-import org.apache.kafka.server.common.ApiMessageAndVersion;
+import org.apache.kafka.metadata.ControllerRegistration;
 
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 
 /**
@@ -34,12 +33,20 @@ import java.util.stream.Collectors;
  * This class is thread-safe.
  */
 public final class ClusterImage {
-    public static final ClusterImage EMPTY = new ClusterImage(Collections.emptyMap());
+    public static final ClusterImage EMPTY = new ClusterImage(
+            Collections.emptyMap(),
+            Collections.emptyMap());
 
     private final Map<Integer, BrokerRegistration> brokers;
 
-    public ClusterImage(Map<Integer, BrokerRegistration> brokers) {
+    private final Map<Integer, ControllerRegistration> controllers;
+
+    public ClusterImage(
+        Map<Integer, BrokerRegistration> brokers,
+        Map<Integer, ControllerRegistration> controllers
+    ) {
         this.brokers = Collections.unmodifiableMap(brokers);
+        this.controllers = Collections.unmodifiableMap(controllers);
     }
 
     public boolean isEmpty() {
@@ -54,12 +61,18 @@ public final class ClusterImage {
         return brokers.get(nodeId);
     }
 
-    public void write(Consumer<List<ApiMessageAndVersion>> out) {
-        List<ApiMessageAndVersion> batch = new ArrayList<>();
+    public Map<Integer, ControllerRegistration> controllers() {
+        return controllers;
+    }
+
+    public boolean containsBroker(int brokerId) {
+        return brokers.containsKey(brokerId);
+    }
+
+    public void write(ImageWriter writer, ImageWriterOptions options) {
         for (BrokerRegistration broker : brokers.values()) {
-            batch.add(broker.toRecord());
+            writer.write(broker.toRecord(options));
         }
-        out.accept(batch);
     }
 
     @Override
@@ -76,7 +89,6 @@ public final class ClusterImage {
 
     @Override
     public String toString() {
-        return brokers.entrySet().stream().
-            map(e -> e.getKey() + ":" + e.getValue()).collect(Collectors.joining(", "));
+        return new ClusterImageNode(this).stringify();
     }
 }

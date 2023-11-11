@@ -142,7 +142,7 @@ public class BatchBuilder<T> {
         );
 
         if (!isOpenForAppends) {
-            return OptionalInt.of(batchHeaderSizeInBytes() + bytesNeeded);
+            return OptionalInt.of(Math.addExact(batchHeaderSizeInBytes(), bytesNeeded));
         }
 
         int approxUnusedSizeInBytes = maxBytes - approximateSizeInBytes();
@@ -157,7 +157,7 @@ public class BatchBuilder<T> {
             }
         }
 
-        return OptionalInt.of(batchHeaderSizeInBytes() + bytesNeeded);
+        return OptionalInt.of(Math.addExact(batchHeaderSizeInBytes(), bytesNeeded));
     }
 
     private int flushedSizeInBytes() {
@@ -256,6 +256,7 @@ public class BatchBuilder<T> {
             RecordBatch.NO_SEQUENCE,
             false,
             isControlBatch,
+            false,
             leaderEpoch,
             numRecords()
         );
@@ -327,7 +328,7 @@ public class BatchBuilder<T> {
             if (expectedNextOffset - baseOffset >= Integer.MAX_VALUE) {
                 throw new IllegalArgumentException(
                     String.format(
-                        "Adding %s records to a batch with base offset of %s and next offset of %s",
+                        "Adding %d records to a batch with base offset of %d and next offset of %d",
                         records.size(),
                         baseOffset,
                         expectedNextOffset

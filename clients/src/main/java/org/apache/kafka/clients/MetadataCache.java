@@ -51,7 +51,6 @@ public class MetadataCache {
     private final Node controller;
     private final Map<TopicPartition, PartitionMetadata> metadataByPartition;
     private final Map<String, Uuid> topicIds;
-    private final Map<Uuid, String> topicNames;
 
     private Cluster clusterInstance;
 
@@ -83,11 +82,6 @@ public class MetadataCache {
         this.controller = controller;
         this.topicIds = topicIds;
 
-        this.topicNames = new HashMap<>(topicIds.size());
-        for (Map.Entry<String, Uuid> entry : topicIds.entrySet()) {
-            this.topicNames.put(entry.getValue(), entry.getKey());
-        }
-
         this.metadataByPartition = new HashMap<>(partitions.size());
         for (PartitionMetadata p : partitions) {
             this.metadataByPartition.put(p.topicPartition, p);
@@ -106,10 +100,6 @@ public class MetadataCache {
 
     Map<String, Uuid> topicIds() {
         return topicIds;
-    }
-
-    Map<Uuid, String> topicNames() {
-        return topicNames;
     }
 
     Optional<Node> nodeById(int id) {
@@ -139,8 +129,8 @@ public class MetadataCache {
      * @param addUnauthorizedTopics unauthorized topics to add
      * @param addInternalTopics internal topics to add
      * @param newController the new controller node
-     * @param topicIds the mapping from topic name to topic ID from the MetadataResponse
-     * @param retainTopic returns whether a topic's metadata should be retained
+     * @param addTopicIds the mapping from topic name to topic ID, for topics in addPartitions
+     * @param retainTopic returns whether a pre-existing topic's metadata should be retained
      * @return the merged metadata cache
      */
     MetadataCache mergeWith(String newClusterId,
@@ -150,25 +140,23 @@ public class MetadataCache {
                             Set<String> addInvalidTopics,
                             Set<String> addInternalTopics,
                             Node newController,
-                            Map<String, Uuid> topicIds,
+                            Map<String, Uuid> addTopicIds,
                             BiPredicate<String, Boolean> retainTopic) {
 
         Predicate<String> shouldRetainTopic = topic -> retainTopic.test(topic, internalTopics.contains(topic));
 
         Map<TopicPartition, PartitionMetadata> newMetadataByPartition = new HashMap<>(addPartitions.size());
-        Map<String, Uuid> newTopicIds = new HashMap<>(topicIds.size());
 
-        // We want the most recent topic ID. We add the old one here for retained topics and then update with newest information in the MetadataResponse
-        // we add if a new topic ID is added or remove if the request did not support topic IDs for this topic.
-        for (Map.Entry<String, Uuid> entry : this.topicIds.entrySet()) {
-            if (shouldRetainTopic.test(entry.getKey())) {
-                newTopicIds.put(entry.getKey(), entry.getValue());
-            }
-        }
+        // We want the most recent topic ID. We start with the previous ID stored for retained topics and then
+        // update with newest information from the MetadataResponse. We always take the latest state, removing existing
+        // topic IDs if the latest state contains the topic name but not a topic ID.
+        Map<String, Uuid> newTopicIds = this.topicIds.entrySet().stream()
+                .filter(entry -> shouldRetainTopic.test(entry.getKey()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
         for (PartitionMetadata partition : addPartitions) {
             newMetadataByPartition.put(partition.topicPartition, partition);
-            Uuid id = topicIds.get(partition.topic());
+            Uuid id = addTopicIds.get(partition.topic());
             if (id != null)
                 newTopicIds.put(partition.topic(), id);
             else

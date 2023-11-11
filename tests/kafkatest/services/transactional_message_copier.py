@@ -93,7 +93,7 @@ class TransactionalMessageCopier(KafkaPathResolverMixin, BackgroundThreadService
                         self.consumed = int(data["consumed"])
                         self.logger.info("%s: consumed %d, remaining %d" %
                                          (self.transactional_id, self.consumed, self.remaining))
-                        if "shutdown_complete" in data:
+                        if data["stage"] == "ShutdownComplete":
                            if self.remaining == 0:
                                 # We are only finished if the remaining
                                 # messages at the time of shutdown is 0.
@@ -168,7 +168,7 @@ class TransactionalMessageCopier(KafkaPathResolverMixin, BackgroundThreadService
         sig = signal.SIGTERM if clean_shutdown else signal.SIGKILL
         for pid in pids:
             node.account.signal(pid, sig)
-        wait_until(lambda: len(self.pids(node)) == 0, timeout_sec=60, err_msg="Node %s: Message Copier failed to stop" % str(node.account))
+        wait_until(lambda: not self.pids(node), timeout_sec=60, err_msg="Node %s: Message Copier failed to stop" % str(node.account))
 
     def stop_node(self, node, clean_shutdown=True):
         self.kill_node(node, clean_shutdown)

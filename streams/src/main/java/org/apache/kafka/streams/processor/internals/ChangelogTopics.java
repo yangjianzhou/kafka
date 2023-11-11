@@ -42,7 +42,7 @@ public class ChangelogTopics {
     private final Map<TaskId, Set<TopicPartition>> preExistingChangelogPartitionsForTask = new HashMap<>();
     private final Set<TopicPartition> preExistingNonSourceTopicBasedChangelogPartitions = new HashSet<>();
     private final Set<String> sourceTopicBasedChangelogTopics = new HashSet<>();
-    private final Set<TopicPartition> preExsitingSourceTopicBasedChangelogPartitions = new HashSet<>();
+    private final Set<TopicPartition> preExistingSourceTopicBasedChangelogPartitions = new HashSet<>();
     private final Logger log;
 
     public ChangelogTopics(final InternalTopicManager internalTopicManager,
@@ -106,7 +106,7 @@ public class ChangelogTopics {
                     if (!sourceTopicBasedChangelogTopics.contains(topicPartition.topic())) {
                         preExistingNonSourceTopicBasedChangelogPartitions.add(topicPartition);
                     } else {
-                        preExsitingSourceTopicBasedChangelogPartitions.add(topicPartition);
+                        preExistingSourceTopicBasedChangelogPartitions.add(topicPartition);
                     }
                 }
             }
@@ -125,10 +125,14 @@ public class ChangelogTopics {
     }
 
     public Set<TopicPartition> preExistingSourceTopicBasedPartitions() {
-        return Collections.unmodifiableSet(preExsitingSourceTopicBasedChangelogPartitions);
+        return Collections.unmodifiableSet(preExistingSourceTopicBasedChangelogPartitions);
     }
 
     public Set<TaskId> statefulTaskIds() {
         return Collections.unmodifiableSet(changelogPartitionsForStatefulTask.keySet());
+    }
+
+    public Map<TaskId, Set<TopicPartition>> changelogPartionsForTask() {
+        return Collections.unmodifiableMap(changelogPartitionsForStatefulTask);
     }
 }

@@ -39,7 +39,7 @@ class GroupCoordinatorIntegrationTest extends KafkaServerTestHarness {
 
   @Test
   def testGroupCoordinatorPropagatesOffsetsTopicCompressionCodec(): Unit = {
-    val consumer = TestUtils.createConsumer(TestUtils.getBrokerListStrFromServers(servers))
+    val consumer = TestUtils.createConsumer(bootstrapServers())
     val offsetMap = Map(
       new TopicPartition(Topic.GROUP_METADATA_TOPIC_NAME, 0) -> new OffsetAndMetadata(10, "")
     ).asJava
@@ -48,10 +48,10 @@ class GroupCoordinatorIntegrationTest extends KafkaServerTestHarness {
     def getGroupMetadataLogOpt: Option[UnifiedLog] =
       logManager.getLog(new TopicPartition(Topic.GROUP_METADATA_TOPIC_NAME, 0))
 
-    TestUtils.waitUntilTrue(() => getGroupMetadataLogOpt.exists(_.logSegments.exists(_.log.batches.asScala.nonEmpty)),
+    TestUtils.waitUntilTrue(() => getGroupMetadataLogOpt.exists(_.logSegments.asScala.exists(_.log.batches.asScala.nonEmpty)),
                             "Commit message not appended in time")
 
-    val logSegments = getGroupMetadataLogOpt.get.logSegments
+    val logSegments = getGroupMetadataLogOpt.get.logSegments.asScala
     val incorrectCompressionCodecs = logSegments
       .flatMap(_.log.batches.asScala.map(_.compressionType))
       .filter(_ != offsetsTopicCompressionCodec)

@@ -27,6 +27,7 @@ import net.sourceforge.argparse4j.inf.ArgumentParser;
 import net.sourceforge.argparse4j.inf.Namespace;
 
 import java.io.BufferedWriter;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -156,6 +157,10 @@ public final class MessageGenerator {
 
     static final String DOUBLE_NODE_CLASS = "com.fasterxml.jackson.databind.node.DoubleNode";
 
+    static final long UNSIGNED_INT_MAX = 4294967295L;
+
+    static final int UNSIGNED_SHORT_MAX = 65535;
+
     /**
      * The Jackson serializer we use for JSON objects.
      */
@@ -234,7 +239,7 @@ public final class MessageGenerator {
                         String name = generator.outputName(spec) + JAVA_SUFFIX;
                         outputFileNames.add(name);
                         Path outputPath = Paths.get(outputDir, name);
-                        try (BufferedWriter writer = Files.newBufferedWriter(outputPath)) {
+                        try (BufferedWriter writer = Files.newBufferedWriter(outputPath, StandardCharsets.UTF_8)) {
                             generator.generateAndWrite(spec, writer);
                         }
                     }
@@ -248,7 +253,7 @@ public final class MessageGenerator {
         for (TypeClassGenerator typeClassGenerator : typeClassGenerators) {
             outputFileNames.add(typeClassGenerator.outputName());
             Path factoryOutputPath = Paths.get(outputDir, typeClassGenerator.outputName());
-            try (BufferedWriter writer = Files.newBufferedWriter(factoryOutputPath)) {
+            try (BufferedWriter writer = Files.newBufferedWriter(factoryOutputPath, StandardCharsets.UTF_8)) {
                 typeClassGenerator.generateAndWrite(writer);
             }
         }

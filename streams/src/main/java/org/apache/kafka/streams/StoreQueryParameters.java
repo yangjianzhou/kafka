@@ -30,7 +30,7 @@ public class StoreQueryParameters<T> {
     private final String storeName;
     private final QueryableStoreType<T> queryableStoreType;
 
-    private StoreQueryParameters(final String storeName, final QueryableStoreType<T>  queryableStoreType, final Integer partition, final boolean staleStores) {
+    protected StoreQueryParameters(final String storeName, final QueryableStoreType<T>  queryableStoreType, final Integer partition, final boolean staleStores) {
         this.storeName = storeName;
         this.queryableStoreType = queryableStoreType;
         this.partition = partition;
@@ -105,7 +105,7 @@ public class StoreQueryParameters<T> {
         if (!(obj instanceof StoreQueryParameters)) {
             return false;
         }
-        final StoreQueryParameters storeQueryParameters = (StoreQueryParameters) obj;
+        final StoreQueryParameters<?> storeQueryParameters = (StoreQueryParameters<?>) obj;
         return Objects.equals(storeQueryParameters.partition, partition)
                 && Objects.equals(storeQueryParameters.staleStores, staleStores)
                 && Objects.equals(storeQueryParameters.storeName, storeName)

@@ -22,20 +22,24 @@ import java.nio.channels.ClosedChannelException
 import java.nio.charset.StandardCharsets
 import java.util.regex.Pattern
 import java.util.Collections
-import kafka.server.{FetchDataInfo, KafkaConfig, LogDirFailureChannel, LogOffsetMetadata}
-import kafka.utils.{MockTime, Scheduler, TestUtils}
+import kafka.server.KafkaConfig
+import kafka.utils.TestUtils
 import org.apache.kafka.common.{KafkaException, TopicPartition}
 import org.apache.kafka.common.errors.KafkaStorageException
 import org.apache.kafka.common.record.{CompressionType, MemoryRecords, Record, SimpleRecord}
 import org.apache.kafka.common.utils.{Time, Utils}
-import org.junit.jupiter.api.Assertions.{assertFalse, _}
+import org.apache.kafka.server.util.{MockTime, Scheduler}
+import org.apache.kafka.storage.internals.log.{FetchDataInfo, LogConfig, LogDirFailureChannel, LogFileUtils, LogOffsetMetadata, LogSegment, LogSegments}
+import org.junit.jupiter.api.Assertions._
+import org.junit.jupiter.api.function.Executable
 import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
+import org.mockito.Mockito.{doReturn, spy}
 
 import scala.jdk.CollectionConverters._
 
 class LocalLogTest {
 
-  var config: KafkaConfig = null
+  var config: KafkaConfig = _
   val tmpDir: File = TestUtils.tempDir()
   val logDir: File = TestUtils.randomPartitionLogDir(tmpDir)
   val topicPartition = new TopicPartition("test_topic", 1)
@@ -120,12 +124,22 @@ class LocalLogTest {
     log.roll()
     assertEquals(2, log.segments.numberOfSegments)
     assertFalse(logDir.listFiles.isEmpty)
-    val segmentsBeforeDelete = List[LogSegment]() ++ log.segments.values
+    val segmentsBeforeDelete = log.segments.values.asScala.toVector
     val deletedSegments = log.deleteAllSegments()
     assertTrue(log.segments.isEmpty)
     assertEquals(segmentsBeforeDelete, deletedSegments)
     assertThrows(classOf[KafkaStorageException], () => log.checkIfMemoryMappedBufferClosed())
     assertTrue(logDir.exists)
+  }
+
+  @Test
+  def testRollEmptyActiveSegment(): Unit = {
+    val oldActiveSegment = log.segments.activeSegment
+    log.roll()
+    assertEquals(1, log.segments.numberOfSegments)
+    assertNotEquals(oldActiveSegment, log.segments.activeSegment)
+    assertFalse(logDir.listFiles.isEmpty)
+    assertTrue(oldActiveSegment.hasSuffix(LocalLog.DeletedFileSuffix))
   }
 
   @Test
@@ -167,7 +181,7 @@ class LocalLogTest {
     assertEquals(newLogDir, log.dir)
     assertEquals(newLogDir.getParent, log.parentDir)
     assertEquals(newLogDir.getParent, log.dir.getParent)
-    log.segments.values.foreach(segment => assertEquals(newLogDir.getPath, segment.log.file().getParentFile.getPath))
+    log.segments.values.forEach(segment => assertEquals(newLogDir.getPath, segment.log.file().getParentFile.getPath))
     assertEquals(2, log.segments.numberOfSegments)
   }
 
@@ -264,7 +278,7 @@ class LocalLogTest {
       def deletedSegments: Iterable[LogSegment] = _deletedSegments
     }
     val reason = new TestDeletionReason()
-    val toDelete = List[LogSegment]() ++ log.segments.values
+    val toDelete = log.segments.values.asScala.toVector
     log.removeAndDeleteSegments(toDelete, asyncDelete = asyncDelete, reason)
     if (asyncDelete) {
       mockTime.sleep(log.config.fileDeleteDelayMs + 1)
@@ -293,7 +307,7 @@ class LocalLogTest {
 
     assertEquals(10L, log.segments.numberOfSegments)
 
-    val toDelete = List[LogSegment]() ++ log.segments.values
+    val toDelete = log.segments.values.asScala.toVector
     LocalLog.deleteSegmentFiles(toDelete, asyncDelete = asyncDelete, log.dir, log.topicPartition, log.config, log.scheduler, log.logDirFailureChannel, "")
     if (asyncDelete) {
       toDelete.foreach {
@@ -329,14 +343,14 @@ class LocalLogTest {
     {
       val deletable = log.deletableSegments(
         (segment: LogSegment, _: Option[LogSegment]) => segment.baseOffset <= 5)
-      val expected = log.segments.nonActiveLogSegmentsFrom(0L).filter(segment => segment.baseOffset <= 5).toList
+      val expected = log.segments.nonActiveLogSegmentsFrom(0L).asScala.filter(segment => segment.baseOffset <= 5).toList
       assertEquals(6, expected.length)
       assertEquals(expected, deletable.toList)
     }
 
     {
       val deletable = log.deletableSegments((_: LogSegment, _: Option[LogSegment]) => true)
-      val expected = log.segments.nonActiveLogSegmentsFrom(0L).toList
+      val expected = log.segments.nonActiveLogSegmentsFrom(0L).asScala.toList
       assertEquals(9, expected.length)
       assertEquals(expected, deletable.toList)
     }
@@ -345,7 +359,7 @@ class LocalLogTest {
       val record = new SimpleRecord(mockTime.milliseconds, "a".getBytes)
       appendRecords(List(record), initialOffset = 9L)
       val deletable = log.deletableSegments((_: LogSegment, _: Option[LogSegment]) => true)
-      val expected = log.segments.values.toList
+      val expected = log.segments.values.asScala.toList
       assertEquals(10, expected.length)
       assertEquals(expected, deletable.toList)
     }
@@ -366,14 +380,14 @@ class LocalLogTest {
       (segment: LogSegment, nextSegmentOpt: Option[LogSegment]) => {
         assertEquals(offset, segment.baseOffset)
         val floorSegmentOpt = log.segments.floorSegment(offset)
-        assertTrue(floorSegmentOpt.isDefined)
+        assertTrue(floorSegmentOpt.isPresent)
         assertEquals(floorSegmentOpt.get, segment)
         if (offset == log.logEndOffset) {
           assertFalse(nextSegmentOpt.isDefined)
         } else {
           assertTrue(nextSegmentOpt.isDefined)
           val higherSegmentOpt = log.segments.higherSegment(segment.baseOffset)
-          assertTrue(higherSegmentOpt.isDefined)
+          assertTrue(higherSegmentOpt.isPresent)
           assertEquals(segment.baseOffset + 1, higherSegmentOpt.get.baseOffset)
           assertEquals(higherSegmentOpt.get, nextSegmentOpt.get)
         }
@@ -381,7 +395,25 @@ class LocalLogTest {
         true
       })
     assertEquals(10L, log.segments.numberOfSegments)
-    assertEquals(log.segments.nonActiveLogSegmentsFrom(0L).toSeq, deletableSegments.toSeq)
+    assertEquals(log.segments.nonActiveLogSegmentsFrom(0L).asScala.toSeq, deletableSegments.toSeq)
+  }
+
+  @Test
+  def testCreateAndDeleteSegment(): Unit = {
+    val record = new SimpleRecord(mockTime.milliseconds, "a".getBytes)
+    appendRecords(List(record))
+    val newOffset = log.segments.activeSegment.baseOffset + 1
+    val oldActiveSegment = log.segments.activeSegment
+    val newActiveSegment = log.createAndDeleteSegment(newOffset, log.segments.activeSegment, asyncDelete = true, LogTruncation(log))
+    assertEquals(1, log.segments.numberOfSegments)
+    assertEquals(newActiveSegment, log.segments.activeSegment)
+    assertNotEquals(oldActiveSegment, log.segments.activeSegment)
+    assertTrue(oldActiveSegment.hasSuffix(LocalLog.DeletedFileSuffix))
+    assertEquals(newOffset, log.segments.activeSegment.baseOffset)
+    assertEquals(0L, log.recoveryPoint)
+    assertEquals(newOffset, log.logEndOffset)
+    val fetchDataInfo = readRecords(startOffset = newOffset)
+    assertTrue(fetchDataInfo.records.records.asScala.isEmpty)
   }
 
   @Test
@@ -397,7 +429,8 @@ class LocalLogTest {
       appendRecords(List(record), initialOffset = offset)
     }
     assertEquals(5, log.segments.numberOfSegments)
-    val expected = List[LogSegment]() ++ log.segments.values
+    assertNotEquals(10L, log.segments.activeSegment.baseOffset)
+    val expected = log.segments.values.asScala.toVector
     val deleted = log.truncateFullyAndStartAt(10L)
     assertEquals(expected, deleted)
     assertEquals(1, log.segments.numberOfSegments)
@@ -419,10 +452,10 @@ class LocalLogTest {
     assertEquals(5, log.segments.numberOfSegments)
     assertEquals(12L, log.logEndOffset)
 
-    val expected = List[LogSegment]() ++ log.segments.values(9L, log.logEndOffset + 1)
+    val expected = log.segments.values(9L, log.logEndOffset + 1).asScala.toVector
     // Truncate to an offset before the base offset of the active segment
     val deleted = log.truncateTo(7L)
-    assertEquals(expected, deleted)
+    assertEquals(expected, deleted.toVector)
     assertEquals(3, log.segments.numberOfSegments)
     assertEquals(6L, log.segments.activeSegment.baseOffset)
     assertEquals(0L, log.recoveryPoint)
@@ -446,7 +479,7 @@ class LocalLogTest {
     }
 
     def nonActiveBaseOffsetsFrom(startOffset: Long): Seq[Long] = {
-      log.segments.nonActiveLogSegmentsFrom(startOffset).map(_.baseOffset).toSeq
+      log.segments.nonActiveLogSegmentsFrom(startOffset).asScala.map(_.baseOffset).toSeq
     }
 
     assertEquals(5L, log.segments.activeSegment.baseOffset)
@@ -581,14 +614,14 @@ class LocalLogTest {
   def testOffsetFromFile(): Unit = {
     val offset = 23423423L
 
-    val logFile = LocalLog.logFile(tmpDir, offset)
-    assertEquals(offset, LocalLog.offsetFromFile(logFile))
+    val logFile = LogFileUtils.logFile(tmpDir, offset)
+    assertEquals(offset, LogFileUtils.offsetFromFile(logFile))
 
-    val offsetIndexFile = LocalLog.offsetIndexFile(tmpDir, offset)
-    assertEquals(offset, LocalLog.offsetFromFile(offsetIndexFile))
+    val offsetIndexFile = LogFileUtils.offsetIndexFile(tmpDir, offset)
+    assertEquals(offset, LogFileUtils.offsetFromFile(offsetIndexFile))
 
-    val timeIndexFile = LocalLog.timeIndexFile(tmpDir, offset)
-    assertEquals(offset, LocalLog.offsetFromFile(timeIndexFile))
+    val timeIndexFile = LogFileUtils.timeIndexFile(tmpDir, offset)
+    assertEquals(offset, LogFileUtils.offsetFromFile(timeIndexFile))
   }
 
   @Test
@@ -670,6 +703,20 @@ class LocalLogTest {
     assertThrows(classOf[KafkaException], () => log.roll())
   }
 
+  @Test
+  def testFlushingNonExistentDir(): Unit = {
+    val spyLog = spy(log)
+
+    val record = new SimpleRecord(mockTime.milliseconds, "a".getBytes)
+    appendRecords(List(record))
+    mockTime.sleep(1)
+    val newSegment = log.roll()
+
+    // simulate the directory is renamed concurrently
+    doReturn(new File("__NON_EXISTENT__"), Nil: _*).when(spyLog).dir
+    assertDoesNotThrow((() => spyLog.flush(newSegment.baseOffset)): Executable)
+  }
+
   private def createLocalLogWithActiveSegment(dir: File = logDir,
                                               config: LogConfig,
                                               segments: LogSegments = new LogSegments(topicPartition),
@@ -679,12 +726,12 @@ class LocalLogTest {
                                               time: Time = mockTime,
                                               topicPartition: TopicPartition = topicPartition,
                                               logDirFailureChannel: LogDirFailureChannel = logDirFailureChannel): LocalLog = {
-    segments.add(LogSegment.open(dir = dir,
-                                 baseOffset = 0L,
+    segments.add(LogSegment.open(dir,
+                                 0L,
                                  config,
-                                 time = time,
-                                 initFileSize = config.initFileSize,
-                                 preallocate = config.preallocate))
+                                 time,
+                                 config.initFileSize,
+                                 config.preallocate))
     new LocalLog(_dir = dir,
                  config = config,
                  segments = segments,

@@ -76,11 +76,11 @@ public class TopicConfig {
         "their data. If set to -1, no time limit is applied.";
 
     public static final String REMOTE_LOG_STORAGE_ENABLE_CONFIG = "remote.storage.enable";
-    public static final String REMOTE_LOG_STORAGE_ENABLE_DOC = "To enable tier storage for a topic, set `remote.storage.enable` as true. " +
+    public static final String REMOTE_LOG_STORAGE_ENABLE_DOC = "To enable tiered storage for a topic, set this configuration as true. " +
             "You can not disable this config once it is enabled. It will be provided in future versions.";
 
     public static final String LOCAL_LOG_RETENTION_MS_CONFIG = "local.retention.ms";
-    public static final String LOCAL_LOG_RETENTION_MS_DOC = "The number of milli seconds to keep the local log segment before it gets deleted. " +
+    public static final String LOCAL_LOG_RETENTION_MS_DOC = "The number of milliseconds to keep the local log segment before it gets deleted. " +
             "Default value is -2, it represents `retention.ms` value is to be used. The effective value should always be less than or equal " +
             "to `retention.ms` value.";
 
@@ -99,7 +99,7 @@ public class TopicConfig {
         "limit only applies to a single record in that case.";
 
     public static final String INDEX_INTERVAL_BYTES_CONFIG = "index.interval.bytes";
-    public static final String INDEX_INTERVAL_BYTES_DOCS = "This setting controls how frequently " +
+    public static final String INDEX_INTERVAL_BYTES_DOC = "This setting controls how frequently " +
         "Kafka adds an index entry to its offset index. The default setting ensures that we index a " +
         "message roughly every 4096 bytes. More indexing allows reads to jump closer to the exact " +
         "position in the log but makes the index larger. You probably don't need to change this.";
@@ -139,11 +139,13 @@ public class TopicConfig {
     public static final String CLEANUP_POLICY_CONFIG = "cleanup.policy";
     public static final String CLEANUP_POLICY_COMPACT = "compact";
     public static final String CLEANUP_POLICY_DELETE = "delete";
-    public static final String CLEANUP_POLICY_DOC = "A string that is either \"" + CLEANUP_POLICY_DELETE +
-        "\" or \"" + CLEANUP_POLICY_COMPACT + "\" or both. This string designates the retention policy to use on " +
-        "old log segments. The default policy (\"delete\") will discard old segments when their retention " +
-        "time or size limit has been reached. The \"compact\" setting will enable <a href=\"#compaction\">log " +
-        "compaction</a> on the topic.";
+    public static final String CLEANUP_POLICY_DOC = "This config designates the retention policy to " +
+        "use on log segments. The \"delete\" policy (which is the default) will discard old segments " +
+        "when their retention time or size limit has been reached. The \"compact\" policy will enable " +
+        "<a href=\"#compaction\">log compaction</a>, which retains the latest value for each key. " +
+        "It is also possible to specify both policies in a comma-separated list (e.g. \"delete,compact\"). " +
+        "In this case, old segments will be discarded per the retention time and size configuration, " +
+        "while retained segments will be compacted.";
 
     public static final String UNCLEAN_LEADER_ELECTION_ENABLE_CONFIG = "unclean.leader.election.enable";
     public static final String UNCLEAN_LEADER_ELECTION_ENABLE_DOC = "Indicates whether to enable replicas " +
@@ -195,12 +197,35 @@ public class TopicConfig {
     public static final String MESSAGE_TIMESTAMP_TYPE_DOC = "Define whether the timestamp in the message is " +
         "message create time or log append time. The value should be either `CreateTime` or `LogAppendTime`";
 
+    /**
+     * @deprecated since 3.6, removal planned in 4.0.
+     * Use message.timestamp.before.max.ms and message.timestamp.after.max.ms instead
+     */
+    @Deprecated
     public static final String MESSAGE_TIMESTAMP_DIFFERENCE_MAX_MS_CONFIG = "message.timestamp.difference.max.ms";
-    public static final String MESSAGE_TIMESTAMP_DIFFERENCE_MAX_MS_DOC = "The maximum difference allowed between " +
+
+    /**
+     * @deprecated since 3.6, removal planned in 4.0.
+     * Use message.timestamp.before.max.ms and message.timestamp.after.max.ms instead
+     */
+    @Deprecated
+    public static final String MESSAGE_TIMESTAMP_DIFFERENCE_MAX_MS_DOC = "[DEPRECATED] The maximum difference allowed between " +
         "the timestamp when a broker receives a message and the timestamp specified in the message. If " +
         "message.timestamp.type=CreateTime, a message will be rejected if the difference in timestamp " +
         "exceeds this threshold. This configuration is ignored if message.timestamp.type=LogAppendTime.";
 
+    public static final String MESSAGE_TIMESTAMP_BEFORE_MAX_MS_CONFIG = "message.timestamp.before.max.ms";
+    public static final String MESSAGE_TIMESTAMP_BEFORE_MAX_MS_DOC = "This configuration sets the allowable timestamp " +
+        "difference between the broker's timestamp and the message timestamp. The message timestamp can be earlier than " +
+        "or equal to the broker's timestamp, with the maximum allowable difference determined by the value set in this " +
+        "configuration. If message.timestamp.type=CreateTime, the message will be rejected if the difference in " +
+        "timestamps exceeds this specified threshold. This configuration is ignored if message.timestamp.type=LogAppendTime.";
+    public static final String MESSAGE_TIMESTAMP_AFTER_MAX_MS_CONFIG = "message.timestamp.after.max.ms";
+    public static final String MESSAGE_TIMESTAMP_AFTER_MAX_MS_DOC = "This configuration sets the allowable timestamp " +
+        "difference between the message timestamp and the broker's timestamp. The message timestamp can be later than " +
+        "or equal to the broker's timestamp, with the maximum allowable difference determined by the value set in this " +
+        "configuration. If message.timestamp.type=CreateTime, the message will be rejected if the difference in " +
+        "timestamps exceeds this specified threshold. This configuration is ignored if message.timestamp.type=LogAppendTime.";
     public static final String MESSAGE_DOWNCONVERSION_ENABLE_CONFIG = "message.downconversion.enable";
     public static final String MESSAGE_DOWNCONVERSION_ENABLE_DOC = "This configuration controls whether " +
         "down-conversion of message formats is enabled to satisfy consume requests. When set to <code>false</code>, " +

@@ -30,6 +30,7 @@ import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.errors.ProcessorStateException;
 import org.apache.kafka.streams.errors.StreamsException;
+import org.apache.kafka.streams.processor.CommitCallback;
 import org.apache.kafka.streams.processor.StateRestoreCallback;
 import org.apache.kafka.streams.processor.StateRestoreListener;
 import org.apache.kafka.streams.processor.StateStore;
@@ -145,7 +146,7 @@ public class GlobalStateManagerImpl implements GlobalStateManager {
                         " state store, topic-partition: {}, checkpoint file: {}. If this topic-partition is no longer valid," +
                         " an application reset and state store directory cleanup will be required.",
                     tp.topic(),
-                    checkpointFile.toString()
+                    checkpointFile
                 );
                 throw new StreamsException("Encountered a topic-partition not associated with any global state store");
             }
@@ -167,7 +168,9 @@ public class GlobalStateManagerImpl implements GlobalStateManager {
     }
 
     @Override
-    public void registerStore(final StateStore store, final StateRestoreCallback stateRestoreCallback) {
+    public void registerStore(final StateStore store,
+                              final StateRestoreCallback stateRestoreCallback,
+                              final CommitCallback ignored) {
         log.info("Restoring state for global store {}", store.name());
 
         // TODO (KAFKA-12887): we should not trigger user's exception handler for illegal-argument but always
@@ -416,7 +419,7 @@ public class GlobalStateManagerImpl implements GlobalStateManager {
         try {
             checkpointFile.write(filteredOffsets);
         } catch (final IOException e) {
-            log.warn("Failed to write offset checkpoint file to {} for global stores: {}." +
+            log.warn("Failed to write offset checkpoint file to {} for global stores." +
                 " This may occur if OS cleaned the state.dir in case when it is located in the (default) ${java.io.tmpdir}/kafka-streams directory." +
                 " Changing the location of state.dir may resolve the problem", checkpointFile, e);
         }
@@ -432,7 +435,7 @@ public class GlobalStateManagerImpl implements GlobalStateManager {
         return Collections.unmodifiableMap(checkpointFileCache);
     }
 
-    public String changelogFor(final String storeName) {
+    public final String changelogFor(final String storeName) {
         return storeToChangelogTopic.get(storeName);
     }
 }

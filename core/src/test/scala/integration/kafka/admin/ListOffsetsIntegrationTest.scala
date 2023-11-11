@@ -15,17 +15,19 @@
  * limitations under the License.
  */
 
-package integration.kafka.admin
+package kafka.admin
 
 import kafka.integration.KafkaServerTestHarness
 import kafka.server.KafkaConfig
-import kafka.utils.TestUtils
+import kafka.utils.{TestInfoUtils, TestUtils}
 import org.apache.kafka.clients.admin._
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.utils.Utils
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.{AfterEach, BeforeEach, Test}
+import org.junit.jupiter.api.{AfterEach, BeforeEach, TestInfo}
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 
 import scala.collection.{Map, Seq}
 import scala.jdk.CollectionConverters._
@@ -33,15 +35,15 @@ import scala.jdk.CollectionConverters._
 class ListOffsetsIntegrationTest extends KafkaServerTestHarness {
 
   val topicName = "foo"
-  var adminClient: Admin = null
+  var adminClient: Admin = _
 
   @BeforeEach
-  override def setUp(): Unit = {
-    super.setUp()
+  override def setUp(testInfo: TestInfo): Unit = {
+    super.setUp(testInfo)
     createTopic(topicName, 1, 1.toShort)
     produceMessages()
     adminClient = Admin.create(Map[String, Object](
-      AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG -> brokerList
+      AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG -> bootstrapServers()
     ).asJava)
   }
 
@@ -51,20 +53,23 @@ class ListOffsetsIntegrationTest extends KafkaServerTestHarness {
     super.tearDown()
   }
 
-  @Test
-  def testEarliestOffset(): Unit = {
+  @ParameterizedTest(name = TestInfoUtils.TestWithParameterizedQuorumName)
+  @ValueSource(strings = Array("zk", "kraft"))
+  def testEarliestOffset(quorum: String): Unit = {
     val earliestOffset = runFetchOffsets(adminClient, OffsetSpec.earliest())
     assertEquals(0, earliestOffset.offset())
   }
 
-  @Test
-  def testLatestOffset(): Unit = {
+  @ParameterizedTest(name = TestInfoUtils.TestWithParameterizedQuorumName)
+  @ValueSource(strings = Array("zk", "kraft"))
+  def testLatestOffset(quorum: String): Unit = {
     val latestOffset = runFetchOffsets(adminClient, OffsetSpec.latest())
     assertEquals(3, latestOffset.offset())
   }
 
-  @Test
-  def testMaxTimestampOffset(): Unit = {
+  @ParameterizedTest(name = TestInfoUtils.TestWithParameterizedQuorumName)
+  @ValueSource(strings = Array("zk", "kraft"))
+  def testMaxTimestampOffset(quorum: String): Unit = {
     val maxTimestampOffset = runFetchOffsets(adminClient, OffsetSpec.maxTimestamp())
     assertEquals(1, maxTimestampOffset.offset())
   }
@@ -86,10 +91,10 @@ class ListOffsetsIntegrationTest extends KafkaServerTestHarness {
       new ProducerRecord[Array[Byte], Array[Byte]](topicName, 0, 200L,
         null, new Array[Byte](10000)),
     )
-    TestUtils.produceMessages(servers, records, -1)
+    TestUtils.produceMessages(brokers, records, -1)
   }
 
   def generateConfigs: Seq[KafkaConfig] =
-    TestUtils.createBrokerConfigs(1, zkConnect).map(KafkaConfig.fromProps)
+    TestUtils.createBrokerConfigs(1, zkConnectOrNull).map(KafkaConfig.fromProps)
 }
 

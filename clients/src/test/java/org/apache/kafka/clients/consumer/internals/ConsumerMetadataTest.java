@@ -46,6 +46,7 @@ import static java.util.Collections.singletonList;
 import static java.util.Collections.singletonMap;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ConsumerMetadataTest {
@@ -65,7 +66,7 @@ public class ConsumerMetadataTest {
     }
 
     private void testPatternSubscription(boolean includeInternalTopics) {
-        subscription.subscribe(Pattern.compile("__.*"), new NoOpConsumerRebalanceListener());
+        subscription.subscribe(Pattern.compile("__.*"), Optional.empty());
         ConsumerMetadata metadata = newConsumerMetadata(includeInternalTopics);
 
         MetadataRequest.Builder builder = metadata.newMetadataRequestBuilder();
@@ -102,7 +103,7 @@ public class ConsumerMetadataTest {
 
     @Test
     public void testNormalSubscription() {
-        subscription.subscribe(Utils.mkSet("foo", "bar", "__consumer_offsets"), new NoOpConsumerRebalanceListener());
+        subscription.subscribe(Utils.mkSet("foo", "bar", "__consumer_offsets"), Optional.empty());
         subscription.groupSubscribe(Utils.mkSet("baz", "foo", "bar", "__consumer_offsets"));
         testBasicSubscription(Utils.mkSet("foo", "bar", "baz"), Utils.mkSet("__consumer_offsets"));
 
@@ -114,10 +115,10 @@ public class ConsumerMetadataTest {
     public void testTransientTopics() {
         Map<String, Uuid> topicIds = new HashMap<>();
         topicIds.put("foo", Uuid.randomUuid());
-        subscription.subscribe(singleton("foo"), new NoOpConsumerRebalanceListener());
+        subscription.subscribe(singleton("foo"), Optional.empty());
         ConsumerMetadata metadata = newConsumerMetadata(false);
         metadata.updateWithCurrentRequestVersion(RequestTestUtils.metadataUpdateWithIds(1, singletonMap("foo", 1), topicIds), false, time.milliseconds());
-        assertEquals(topicIds, metadata.topicIds());
+        assertEquals(topicIds.get("foo"), metadata.topicIds().get("foo"));
         assertFalse(metadata.updateRequested());
 
         metadata.addTransientTopics(singleton("foo"));
@@ -131,7 +132,8 @@ public class ConsumerMetadataTest {
         topicPartitionCounts.put("bar", 1);
         topicIds.put("bar", Uuid.randomUuid());
         metadata.updateWithCurrentRequestVersion(RequestTestUtils.metadataUpdateWithIds(1, topicPartitionCounts, topicIds), false, time.milliseconds());
-        assertEquals(topicIds, metadata.topicIds());
+        Map<String, Uuid> metadataTopicIds = metadata.topicIds();
+        topicIds.forEach((topicName, topicId) -> assertEquals(topicId, metadataTopicIds.get(topicName)));
         assertFalse(metadata.updateRequested());
 
         assertEquals(Utils.mkSet("foo", "bar"), new HashSet<>(metadata.fetch().topics()));
@@ -140,7 +142,8 @@ public class ConsumerMetadataTest {
         topicIds.remove("bar");
         metadata.updateWithCurrentRequestVersion(RequestTestUtils.metadataUpdateWithIds(1, topicPartitionCounts, topicIds), false, time.milliseconds());
         assertEquals(singleton("foo"), new HashSet<>(metadata.fetch().topics()));
-        assertEquals(topicIds, metadata.topicIds());
+        assertEquals(topicIds.get("foo"), metadata.topicIds().get("foo"));
+        assertNull(topicIds.get("bar"));
     }
 
     private void testBasicSubscription(Set<String> expectedTopics, Set<String> expectedInternalTopics) {
@@ -176,7 +179,7 @@ public class ConsumerMetadataTest {
     private ConsumerMetadata newConsumerMetadata(boolean includeInternalTopics) {
         long refreshBackoffMs = 50;
         long expireMs = 50000;
-        return new ConsumerMetadata(refreshBackoffMs, expireMs, includeInternalTopics, false,
+        return new ConsumerMetadata(refreshBackoffMs, refreshBackoffMs, expireMs, includeInternalTopics, false,
                 subscription, new LogContext(), new ClusterResourceListeners());
     }
 

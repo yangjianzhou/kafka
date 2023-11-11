@@ -59,6 +59,7 @@ public class AllBrokersStrategyIntegrationTest {
             result,
             time.milliseconds() + TIMEOUT_MS,
             RETRY_BACKOFF_MS,
+            RETRY_BACKOFF_MS,
             logContext
         );
     }
@@ -215,7 +216,7 @@ public class AllBrokersStrategyIntegrationTest {
         return new MetadataResponse(response, ApiKeys.METADATA.latestVersion());
     }
 
-    private class MockApiHandler implements AdminApiHandler<AllBrokersStrategy.BrokerKey, Integer> {
+    private class MockApiHandler extends AdminApiHandler.Batched<AllBrokersStrategy.BrokerKey, Integer> {
         private final AllBrokersStrategy allBrokersStrategy = new AllBrokersStrategy(logContext);
 
         @Override
@@ -224,7 +225,7 @@ public class AllBrokersStrategyIntegrationTest {
         }
 
         @Override
-        public AbstractRequest.Builder<?> buildRequest(
+        public AbstractRequest.Builder<?> buildBatchedRequest(
             int brokerId,
             Set<AllBrokersStrategy.BrokerKey> keys
         ) {
