@@ -69,10 +69,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class PrototypeAsyncConsumerTest {
+public class AsyncKafkaConsumerTest {
 
-    private PrototypeAsyncConsumer<?, ?> consumer;
-    private ConsumerTestBuilder.PrototypeAsyncConsumerTestBuilder testBuilder;
+    private AsyncKafkaConsumer<?, ?> consumer;
+    private ConsumerTestBuilder.AsyncKafkaConsumerTestBuilder testBuilder;
     private ApplicationEventHandler applicationEventHandler;
 
     @BeforeEach
@@ -82,7 +82,7 @@ public class PrototypeAsyncConsumerTest {
     }
 
     private void setup(Optional<ConsumerTestBuilder.GroupInformation> groupInfo) {
-        testBuilder = new ConsumerTestBuilder.PrototypeAsyncConsumerTestBuilder(groupInfo);
+        testBuilder = new ConsumerTestBuilder.AsyncKafkaConsumerTestBuilder(groupInfo);
         applicationEventHandler = testBuilder.applicationEventHandler;
         consumer = testBuilder.consumer;
     }
@@ -110,6 +110,13 @@ public class PrototypeAsyncConsumerTest {
         // Create consumer without group id
         resetWithEmptyGroupId();
         assertThrows(InvalidGroupIdException.class, () -> consumer.committed(new HashSet<>()));
+    }
+
+    @Test
+    public void testFailOnClosedConsumer() {
+        consumer.close();
+        final IllegalStateException res = assertThrows(IllegalStateException.class, consumer::assignment);
+        assertEquals("This consumer has already been closed.", res.getMessage());
     }
 
     @Test
