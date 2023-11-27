@@ -110,6 +110,9 @@ public class MemoryRecordsBuilder implements AutoCloseable {
         this.magic = magic;
         this.timestampType = timestampType;
         this.compressionType = compressionType;
+        /**
+         * baseOffset为这一批record的基准offset，初始值为0
+         */
         this.baseOffset = baseOffset;
         this.logAppendTime = logAppendTime;
         this.numRecords = 0;
@@ -378,24 +381,39 @@ public class MemoryRecordsBuilder implements AutoCloseable {
          */
         buffer.position(initialPosition);
         /**
-         * 目前用了多少空间
+         * 目前用了多少空间，包括header
          */
         int size = pos - initialPosition;
         /**
-         * 压缩后的字节大小
+         * 去掉header之后，其他部分用了多少字节
          */
         int writtenCompressed = size - DefaultRecordBatch.RECORD_BATCH_OVERHEAD;
         /**
          * 这个batch目前有多少消息
+         * lastOffset的初始值为null，第一次发送消息后，设置为baseOffset，后面每发送一个消息lastOffset+1
          */
         int offsetDelta = (int) (lastOffset - baseOffset);
 
         final long maxTimestamp;
+        /**
+         * records的timestamp的类型
+         */
         if (timestampType == TimestampType.LOG_APPEND_TIME)
             maxTimestamp = logAppendTime;
         else
+        /**
+         * maxTimestamp为record放入累加器的时间
+         */
             maxTimestamp = this.maxTimestamp;
-
+        /**
+         * magic：通过apiVersions.maxUsableProduceMagic()获取，目前为2
+         * firstTimestamp： 第一次发送消息时的时间
+         * producerId/producerEpoch/baseSequence为固定值
+         * isTransactional：固定值false
+         * isControlBatch： 固定值false
+         * partitionLeaderEpoch：为固定值
+         * numRecords：由多少个消息
+         */
         DefaultRecordBatch.writeHeader(buffer, baseOffset, offsetDelta, size, magic, compressionType, timestampType,
                 firstTimestamp, maxTimestamp, producerId, producerEpoch, baseSequence, isTransactional, isControlBatch,
                 partitionLeaderEpoch, numRecords);
@@ -728,6 +746,9 @@ public class MemoryRecordsBuilder implements AutoCloseable {
         lastOffset = offset;
 
         if (magic > RecordBatch.MAGIC_VALUE_V0 && timestamp > maxTimestamp) {
+            /**
+             * maxTimestamp是这个record放入累加器的时间
+             */
             maxTimestamp = timestamp;
             offsetOfMaxTimestamp = offset;
         }
