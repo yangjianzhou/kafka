@@ -122,10 +122,21 @@ public class MemoryRecordsBuilder implements AutoCloseable {
         this.isTransactional = isTransactional;
         this.isControlBatch = isControlBatch;
         this.partitionLeaderEpoch = partitionLeaderEpoch;
+        /**
+         * 由batch.size控制，默认16k
+         */
         this.writeLimit = writeLimit;
+        /**
+         * 默认值为0
+         */
         this.initialPosition = bufferStream.position();
+        /**
+         * header的大小
+         */
         this.batchHeaderSizeInBytes = AbstractRecords.recordBatchHeaderSizeInBytes(magic, compressionType);
-
+        /**
+         * 下次向bufferStream写入数据的时候，就从initialPosition + batchHeaderSizeInBytes开始写
+         */
         bufferStream.position(initialPosition + batchHeaderSizeInBytes);
         /**
          * 存储消息的buffer，与appendStream的区别待解？
@@ -358,10 +369,25 @@ public class MemoryRecordsBuilder implements AutoCloseable {
     private int writeDefaultBatchHeader() {
         ensureOpenForRecordBatchWrite();
         ByteBuffer buffer = bufferStream.buffer();
+        /**
+         * 获取目前buffer写到的位置
+         */
         int pos = buffer.position();
+        /**
+         * 设置buffer的写入位置为0，为写header做准备
+         */
         buffer.position(initialPosition);
+        /**
+         * 目前用了多少空间
+         */
         int size = pos - initialPosition;
+        /**
+         * 压缩后的字节大小
+         */
         int writtenCompressed = size - DefaultRecordBatch.RECORD_BATCH_OVERHEAD;
+        /**
+         * 这个batch目前有多少消息
+         */
         int offsetDelta = (int) (lastOffset - baseOffset);
 
         final long maxTimestamp;
